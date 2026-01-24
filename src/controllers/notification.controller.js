@@ -4,6 +4,14 @@ import { firebase } from '../config/firebase.js';
 
 // No local supabase init here anymore
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load Strict Stage Rules
+const stagesConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/stages.json'), 'utf8'));
+
 export const triggerNotification = async (req, res) => {
     const { case_id } = req.body;
 
@@ -14,92 +22,84 @@ export const triggerNotification = async (req, res) => {
 
 export const handleWebhook = async (req, res) => {
     try {
-        const { type, table, record, old_record } = req.body;
+        const { type, table, record } = req.body;
 
-        console.log('Webhook received:', type, table);
+        console.log(`🔔 Webhook: ${type} on ${table}`);
 
         if (type === 'INSERT' && table === 'notification_log') {
             const log = record;
 
-            if (!log || !log.case_id) {
-                console.error('Invalid webhook payload: case_id missing', req.body);
-                return res.status(400).json({ error: 'Invalid payload' });
-            }
+            if (!log || !log.case_id) return res.status(400).json({ error: 'Invalid payload' });
 
             const caseId = log.case_id;
-            console.log(`Processing notification log ${log.log_id} for case ${caseId}`);
+            const payload = log.payload || {};
 
-            // Fetch case details to get user_id (assigned users)
-            const { data: caseUsers, error: usersError } = await supabase
+            // Validate Payload - If it's empty, it might be a generic update we want to ignore
+            // to prevent the "Double Notification" issue the user reported.
+            if (!payload.title && !payload.body) {
+                console.log("ℹ️ Skipping empty notification log entry.");
+                // Delete log after processing even if skipped
+                await supabase.from('notification_log').delete().eq('log_id', log.log_id);
+                return res.json({ success: true, message: 'Skipped empty payload' });
+            }
+
+            // Fetch Assigned Users
+            const { data: caseUsers } = await supabase
                 .from('case_users')
                 .select('user_id')
                 .eq('case_id', caseId);
 
-            if (usersError) throw usersError;
+            if (caseUsers && caseUsers.length > 0) {
+                const userIds = caseUsers.map(u => u.user_id);
 
-            if (!caseUsers || caseUsers.length === 0) {
-                console.log(`No users assigned to case ${caseId}.`);
-                await supabase.from('notification_log').delete().eq('log_id', log.log_id);
-                console.log(`🗑️ Deleted processed log ${log.log_id} (no users assigned)`);
-                return res.status(200).json({ message: 'No users assigned' });
-            }
+                const { data: users } = await supabase
+                    .from('users')
+                    .select('fcm_token')
+                    .in('user_id', userIds)
+                    .not('fcm_token', 'is', null);
 
-            const userIds = caseUsers.map(u => u.user_id);
+                if (users && users.length > 0) {
+                    const title = payload.title || 'Case Update';
+                    const body = payload.body || 'You have a new update.';
+                    const color = payload.color || '#2196F3';
+                    const sound = payload.sound || 'default';
 
-            // Fetch users to get FCM tokens
-            const { data: users, error: fcmError } = await supabase
-                .from('users')
-                .select('user_id, fcm_token')
-                .in('user_id', userIds)
-                .not('fcm_token', 'is', null);
-
-            if (fcmError) throw fcmError;
-
-            const payload = log.payload || {};
-            const title = payload.title || 'Case Update';
-            const body = payload.body || 'You have a new update.';
-            const stageColor = payload.color || '#2196F3'; // Default Blue
-            const sound = payload.sound || 'default';
-
-            const results = [];
-
-            for (const user of users) {
-                if (user.fcm_token) {
-                    try {
-                        const message = {
-                            token: user.fcm_token,
-                            notification: {
-                                title: title,
-                                body: body
-                            },
-                            data: {
-                                case_id: caseId,
-                                stage_color: stageColor,
-                                sound: sound,
-                                ...payload
-                            },
-                            android: {
-                                priority: 'high',
-                                notification: {
-                                    sound: sound
-                                }
+                    for (const user of users) {
+                        if (user.fcm_token) {
+                            try {
+                                await firebase.messaging().send({
+                                    token: user.fcm_token,
+                                    notification: { title, body },
+                                    data: {
+                                        case_id: caseId.toString(),
+                                        stage_color: color,
+                                        sound: sound,
+                                        type: payload.type || 'GENERIC'
+                                    },
+                                    android: {
+                                        priority: 'high',
+                                        notification: {
+                                            sound: sound,
+                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel' : 'high_importance_channel'
+                                        }
+                                    }
+                                });
+                            } catch (e) {
+                                console.error(`Failed to send to user ${user.user_id}:`, e.message);
                             }
-                        };
-
-                        await firebase.messaging().send(message);
-                        results.push(`Sent to ${user.user_id}`);
-                    } catch (e) {
-                        console.error(`Failed to send to ${user.user_id}:`, e);
-                        results.push(`Failed: ${user.user_id}`);
+                        }
                     }
+                    console.log(`✅ FCM Sent: ${title}`);
+                } else {
+                    console.log(`No FCM tokens found for users assigned to case ${caseId}.`);
                 }
+            } else {
+                console.log(`No users assigned to case ${caseId}.`);
             }
 
-            // Delete log after successful processing (Delete-on-Success)
+            // Delete log after processing
             await supabase.from('notification_log').delete().eq('log_id', log.log_id);
-            console.log(`🗑️ Deleted processed log ${log.log_id}`);
-
-            return res.json({ success: true, results });
+            return res.json({ success: true });
         }
 
         return res.status(200).json({ success: true, message: 'No action needed' });
@@ -111,11 +111,10 @@ export const handleWebhook = async (req, res) => {
 
 /**
  * SCHEDULER: Daily Case Check
- * Checks all active cases and inserts notification logs if they match timeline criteria.
  */
 export const checkCaseStages = async (req, res) => {
     try {
-        console.log('⏳ Running Daily Case Stage Check...');
+        console.log('⏳ Running Daily Case Stage Check (JSON Strict Mode)...');
 
         // 1. Fetch Active Cases
         const { data: cases, error } = await supabase
@@ -134,72 +133,50 @@ export const checkCaseStages = async (req, res) => {
             const diffTime = Math.abs(now - createdAt);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            const isUnder7 = caseData.under_7_years;
-            let notification = null;
+            const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+            const rules = stagesConfig[category];
 
-            // --- LOGIC: UNDER 7 YEARS ---
-            if (isUnder7) {
-                if ([8, 9, 10].includes(diffDays)) {
-                    notification = { title: `Stage 1: Investigation (Day ${diffDays})`, body: `Case ${caseData.case_number}: Preliminary inquiry should be in progress.`, color: '#4CAF50', day: diffDays };
-                } else if ([12, 13, 14].includes(diffDays)) {
-                    notification = { title: `Stage 2: Arrest/Bail (Day ${diffDays})`, body: `Case ${caseData.case_number}: Check arrest/bail proceedings.`, color: '#FF9800', day: diffDays };
-                } else if ([17, 18, 19].includes(diffDays)) {
-                    notification = { title: `Stage 3: PI Supervision (Day ${diffDays})`, body: `Case ${caseData.case_number}: Investigation under Senior PI supervision.`, color: '#2196F3', day: diffDays };
-                } else if ([22, 23, 24].includes(diffDays)) {
-                    notification = { title: `Stage 4: ACP Report (Day ${diffDays})`, body: `Case ${caseData.case_number}: Submit progress report to ACP.`, color: '#9C27B0', day: diffDays };
-                } else if ([26, 27].includes(diffDays)) {
-                    notification = { title: `Stage 5: Finalization (Day ${diffDays})`, body: `Case ${caseData.case_number}: Finalize investigation & charge sheet.`, color: '#F44336', day: diffDays };
-                } else if ([28, 29].includes(diffDays)) {
-                    notification = { title: `Stage 6: Court Verification (Day ${diffDays})`, body: `Case ${caseData.case_number}: Court verification of charge sheet.`, color: '#009688', day: diffDays };
-                } else if ([30].includes(diffDays)) {
-                    notification = { title: `Stage 7: Submission (Day ${diffDays})`, body: `Case ${caseData.case_number}: Formal submission to court.`, color: '#795548', day: diffDays };
-                }
-            } else {
-                if ([18, 19, 20].includes(diffDays)) {
-                    notification = { title: `Stage 1: Investigation (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Preliminary inquiry check.`, color: '#4CAF50', day: diffDays };
-                } else if ([28, 29, 30].includes(diffDays)) {
-                    notification = { title: `Stage 2: Arrest/Bail (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Arrest/Bail limit check.`, color: '#FF9800', day: diffDays };
-                } else if ([33, 34, 35].includes(diffDays)) {
-                    notification = { title: `Stage 3: PI Supervision (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Senior PI review due.`, color: '#2196F3', day: diffDays };
-                } else if ([38, 39, 40].includes(diffDays)) {
-                    notification = { title: `Stage 4: ACP Report (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Report to ACP due.`, color: '#9C27B0', day: diffDays };
-                } else if ([48, 49, 50].includes(diffDays)) {
-                    notification = { title: `Stage 5: Finalization (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Finalize investigation.`, color: '#F44336', day: diffDays };
-                } else if ([53, 54, 55].includes(diffDays)) {
-                    notification = { title: `Stage 6: Court Verification (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Court verification.`, color: '#009688', day: diffDays };
-                } else if ([58, 59, 60].includes(diffDays)) {
-                    notification = { title: `Stage 7: Submission (Day ${diffDays})`, body: `Major Case ${caseData.case_number}: Submit to court (60 day limit).`, color: '#795548', day: diffDays };
+            // Find matching stage rule for this day
+            let matchedRule = null;
+            let matchedStageNum = null;
+
+            for (const [stageNum, config] of Object.entries(rules)) {
+                if (config.days.includes(diffDays)) {
+                    matchedRule = config;
+                    matchedStageNum = stageNum;
+                    break;
                 }
             }
 
-            if (notification) {
+            if (matchedRule) {
                 notificationsToSend.push({
                     case_id: caseData.case_id,
                     notification_day: diffDays,
                     payload: {
-                        title: notification.title,
-                        body: notification.body,
-                        color: notification.color,
+                        title: `🔔 Stage ${matchedStageNum}: ${matchedRule.name}`,
+                        body: `Case ${caseData.case_number}: ${matchedRule.message}`,
+                        color: matchedRule.color,
                         type: 'STAGE_ALERT',
-                        sound: 'smooth_notification' // Request custom sound
+                        sound: 'smooth_notification'
                     }
                 });
             }
         }
 
         if (notificationsToSend.length > 0) {
-            console.log(`Inserting ${notificationsToSend.length} notifications...`);
             const { error: insertError } = await supabase
                 .from('notification_log')
                 .insert(notificationsToSend);
-
             if (insertError) throw insertError;
+            console.log(`🚀 Inserted ${notificationsToSend.length} professional notifications.`);
+        } else {
+            console.log('No stage notifications generated today.');
         }
 
         return res.json({
             success: true,
             checked: cases.length,
-            notifications_generated: notificationsToSend.length
+            generated: notificationsToSend.length
         });
 
     } catch (error) {
