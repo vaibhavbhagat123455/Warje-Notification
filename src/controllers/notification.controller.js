@@ -106,7 +106,7 @@ export const handleWebhook = async (req, res) => {
                                         notification: {
                                             sound: sound,
                                             // Ensure channel matches sound for customized playback
-                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel' : 'high_importance_channel',
+                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel_v2' : 'high_importance_channel',
                                             color: color // Request icon accent color
                                         }
                                     }
