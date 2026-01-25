@@ -1,6 +1,6 @@
 import express from 'express';
 import { firebase } from '../config/firebase.js';
-import { handleWebhook, checkCaseStages, triggerNotification } from '../controllers/notification.controller.js';
+import { handleWebhook, checkCaseStages, triggerNotification, debugStage } from '../controllers/notification.controller.js';
 
 const router = express.Router();
 
@@ -45,6 +45,8 @@ router.post('/test', async (req, res) => {
  * Called by Cron Job (e.g., GitHub Actions, Vercel Cron)
  */
 router.get('/scheduler/daily-check', checkCaseStages);
+
+router.get('/debug-stage/:caseId', debugStage);
 
 /**
  * SUPABASE WEBHOOK
