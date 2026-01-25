@@ -18,9 +18,14 @@ router.post('/test', async (req, res) => {
 
         const message = {
             token: fcm_token,
-            notification: {
+            // ✅ DATA ONLY (Awesome Notifications handles display)
+            data: {
                 title: '🔥 Firebase Test',
-                body: 'Notification working successfully!'
+                body: 'Awesome styled notification test',
+                stage_color: '#FF0000',
+                sound: 'smooth_notification',
+                case_id: '99',
+                click_action: "FLUTTER_NOTIFICATION_CLICK"
             },
             android: {
                 priority: 'high'
