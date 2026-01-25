@@ -97,16 +97,16 @@ export const sendNotificationForCase = async (caseId, notificationDay, payload =
         try {
             await firebase.messaging().send({
                 token: fcm_token,
-                notification: {
-                    title: messageTitle,
-                    body: messageBody
-                },
+                // ✅ DATA ONLY (Awesome Notifications handles display)
                 data: {
-                    case_id: caseId,
+                    title: messageTitle,
+                    body: messageBody,
+                    case_id: String(caseId),
                     click_action: "FLUTTER_NOTIFICATION_CLICK"
                 },
                 android: {
-                    priority: 'high'
+                    priority: 'high',
+                    ttl: 60 * 60 * 1000 // 1 hour
                 }
             });
             console.log(`Sent notification for Case ${caseData.case_number} (Day ${notificationDay}) to Token ending in ...${fcm_token.slice(-4)}`);
