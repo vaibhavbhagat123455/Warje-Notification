@@ -211,3 +211,33 @@ export const checkCaseStages = async (req, res) => {
         return res.status(500).json({ success: false, error: error.message });
     }
 };
+/**
+ * DEBUG ROUTE
+ * Test what the backend sees for a specfic case
+ */
+export const debugStage = async (req, res) => {
+    try {
+        const { caseId } = req.params;
+        const { data: caseData, error } = await supabase
+            .from('cases')
+            .select('*')
+            .eq('case_id', caseId)
+            .single();
+
+        if (error || !caseData) return res.status(404).json({ error: 'Case not found', details: error });
+
+        const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+        const currentStage = String(caseData.stage);
+        const rule = stagesConfig[category][currentStage];
+
+        return res.json({
+            success: true,
+            case_number: caseData.case_number,
+            category,
+            stage: currentStage,
+            matched_rule: rule || "NO MATCH FOUND - CHECK STAGES.JSON"
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+};
