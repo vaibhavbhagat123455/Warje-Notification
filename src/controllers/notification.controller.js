@@ -108,8 +108,11 @@ export const handleWebhook = async (req, res) => {
                             try {
                                 await firebase.messaging().send({
                                     token: user.fcm_token,
-                                    notification: { title, body },
+                                    // DATA-ONLY MESSAGE: Allows app to handle styling in background
+                                    // notification: { title, body }, <--- REMOVED
                                     data: {
+                                        title: title, // App will read this
+                                        body: body,
                                         case_id: caseId.toString(),
                                         stage_color: color,
                                         sound: sound,
@@ -117,12 +120,7 @@ export const handleWebhook = async (req, res) => {
                                     },
                                     android: {
                                         priority: 'high',
-                                        notification: {
-                                            sound: sound,
-                                            // Ensure channel matches sound for customized playback
-                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel_v2' : 'high_importance_channel',
-                                            color: color // Request icon accent color
-                                        }
+                                        // No notification block here either
                                     }
                                 });
                             } catch (e) {
