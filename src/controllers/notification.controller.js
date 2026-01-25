@@ -178,3 +178,124 @@ export const handleWebhook = async (req, res) => {
         return res.status(500).json({ success: false, error: error.message });
     }
 };
+
+/**
+ * SCHEDULER: Daily Case Check
+ */
+export const checkCaseStages = async (req, res) => {
+    try {
+        console.log('⏳ Running Daily Case Stage Check (Strict Mode)...');
+
+        const { data: cases, error } = await supabase
+            .from('cases')
+            .select('*')
+            .in('status', ['PENDING', 'ONGOING', 'IN_PROGRESS'])
+            .eq('is_deleted', false);
+
+        if (error) throw error;
+
+        const notificationsToSend = [];
+        const now = new Date();
+
+        for (const caseData of cases) {
+            const createdAt = new Date(caseData.created_at);
+            const diffTime = Math.abs(now - createdAt);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+            const rules = stagesConfig[category];
+
+            // Find matching stage rule for this day
+            let matchedRule = null;
+            let matchedStageNum = null;
+
+            for (const [stageNum, config] of Object.entries(rules)) {
+                if (config.days.includes(diffDays)) {
+                    matchedRule = config;
+                    matchedStageNum = stageNum;
+                    break;
+                }
+            }
+
+            if (matchedRule) {
+                notificationsToSend.push({
+                    case_id: caseData.case_id,
+                    notification_day: diffDays,
+                    payload: {
+                        title: `🔔 Stage ${matchedStageNum}: ${matchedRule.name}`,
+                        body: `Case ${caseData.case_number}: ${matchedRule.message}`,
+                        color: matchedRule.color,
+                        type: 'STAGE_ALERT',
+                        sound: 'smooth_notification'
+                    }
+                });
+            }
+        }
+
+        if (notificationsToSend.length > 0) {
+            const { error: insertError } = await supabase
+                .from('notification_log')
+                .insert(notificationsToSend);
+            if (insertError) throw insertError;
+            console.log(`🚀 Inserted ${notificationsToSend.length} professional notifications.`);
+        } else {
+            console.log('No stage notifications generated today.');
+        }
+
+        return res.json({
+            success: true,
+            checked: cases.length,
+            generated: notificationsToSend.length
+        });
+
+    } catch (error) {
+        console.error("Scheduler Error:", error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * DEBUG ROUTE
+ */
+export const debugStage = async (req, res) => {
+    try {
+        const { caseId } = req.params;
+        const { data: caseData, error } = await supabase
+            .from('cases')
+            .select('*')
+            .eq('case_id', caseId)
+            .single();
+
+        if (error || !caseData) return res.status(404).json({ error: 'Case not found', details: error });
+
+        const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+        const inputVal = parseInt(caseData.stage);
+
+        let rule = stagesConfig?.[category]?.[inputVal];
+        let matchType = "Direct Stage ID Match";
+        let stageNum = inputVal;
+
+        if (!rule) {
+            for (const [key, config] of Object.entries(stagesConfig?.[category] || {})) {
+                if (Array.isArray(config.days) && config.days.includes(inputVal)) {
+                    rule = config;
+                    matchType = `Mapped from Day ${inputVal}`;
+                    stageNum = key;
+                    break;
+                }
+            }
+        }
+
+        return res.json({
+            success: true,
+            case_number: caseData.case_number,
+            category,
+            db_stage_value: inputVal,
+            resolved_stage: stageNum,
+            match_type: matchType,
+            matched_rule: rule || "NO MATCH FOUND - CHECK STAGES.JSON"
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+};
