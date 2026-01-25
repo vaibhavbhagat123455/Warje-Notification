@@ -2,16 +2,11 @@ import { sendNotificationForCase } from "../services/notification.service.js";
 import { supabase } from "../config/supabase.js";
 import { firebase } from "../config/firebase.js";
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
 
 // ✅ Load Strict Stage Rules
-const stagesConfig = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "../config/stages.json"), "utf8")
-);
+const stagesConfig = require("../config/stages.json");
 
 // ✅ Helper: Safe stringify
 const safeString = (v) => (v === null || v === undefined ? "" : String(v));
