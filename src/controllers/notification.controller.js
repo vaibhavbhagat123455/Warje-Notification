@@ -28,19 +28,42 @@ export const handleWebhook = async (req, res) => {
 
         if (type === 'INSERT' && table === 'notification_log') {
             const log = record;
-
             if (!log || !log.case_id) return res.status(400).json({ error: 'Invalid payload' });
 
             const caseId = log.case_id;
-            const payload = log.payload || {};
+            let payload = log.payload || {};
 
-            // Validate Payload - If it's empty, it might be a generic update we want to ignore
-            // to prevent the "Double Notification" issue the user reported.
-            if (!payload.title && !payload.body) {
-                console.log("ℹ️ Skipping empty notification log entry.");
-                // Delete log after processing even if skipped
+            // FETCH CASE DETAILS TO DETERMINE CATEGORY (Under/Over 7 Years)
+            const { data: caseData, error: caseError } = await supabase
+                .from('cases')
+                .select('case_number, under_7_years, stage')
+                .eq('case_id', caseId)
+                .single();
+
+            if (caseError || !caseData) {
+                console.error("Failed to fetch case data for webhook:", caseError);
                 await supabase.from('notification_log').delete().eq('log_id', log.log_id);
-                return res.json({ success: true, message: 'Skipped empty payload' });
+                return res.json({ success: false, message: 'Case not found' });
+            }
+
+            // --- SINGLE SOURCE OF TRUTH LOGIC ---
+            // If this is a STAGE_UPDATE, we ignore the DB text and generate it fresh from stages.json
+            // This ensures users always get the "Detailed" text even if DB trigger is simple.
+            if (payload.type === 'STAGE_UPDATE' || (payload.title && payload.title.includes('Stage'))) {
+                const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+                const currentStage = caseData.stage.toString();
+                const rule = stagesConfig[category][currentStage];
+
+                if (rule) {
+                    console.log(`✨ Enriching notification using stages.json for Stage ${currentStage}`);
+                    payload = {
+                        title: `Stage ${currentStage}: ${rule.name}`,
+                        body: `Case ${caseData.case_number}: ${rule.message}`,
+                        color: rule.color,
+                        sound: 'smooth_notification',
+                        type: 'STAGE_UPDATE'
+                    };
+                }
             }
 
             // Fetch Assigned Users
@@ -80,7 +103,9 @@ export const handleWebhook = async (req, res) => {
                                         priority: 'high',
                                         notification: {
                                             sound: sound,
-                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel' : 'high_importance_channel'
+                                            // Ensure channel matches sound for customized playback
+                                            channelId: sound === 'smooth_notification' ? 'stage_updates_channel' : 'high_importance_channel',
+                                            color: color // Request icon accent color
                                         }
                                     }
                                 });
