@@ -47,23 +47,25 @@ export const handleWebhook = async (req, res) => {
             }
 
             // --- SINGLE SOURCE OF TRUTH LOGIC ---
-            // If this is a STAGE_UPDATE, we ignore the DB text and generate it fresh from stages.json
-            // This ensures users always get the "Detailed" text even if DB trigger is simple.
-            if (payload.type === 'STAGE_UPDATE' || (payload.title && payload.title.includes('Stage'))) {
-                const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
-                const currentStage = caseData.stage.toString();
-                const rule = stagesConfig[category][currentStage];
+            // ALWAYS try to enrich based on the current stage in the DB.
+            const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
+            const currentStage = String(caseData.stage); // Ensure string for JSON lookup
 
-                if (rule) {
-                    console.log(`✨ Enriching notification using stages.json for Stage ${currentStage}`);
-                    payload = {
-                        title: `Stage ${currentStage}: ${rule.name}`,
-                        body: `Case ${caseData.case_number}: ${rule.message}`,
-                        color: rule.color,
-                        sound: 'smooth_notification',
-                        type: 'STAGE_UPDATE'
-                    };
-                }
+            console.log(`🔎 Lookup: Category='${category}', Stage='${currentStage}'`);
+
+            const rule = stagesConfig[category] ? stagesConfig[category][currentStage] : null;
+
+            if (rule) {
+                console.log(`✨ Matched Rule: ${rule.name}`);
+                payload = {
+                    title: `Stage ${currentStage}: ${rule.name}`,
+                    body: `Case ${caseData.case_number}: ${rule.message}`,
+                    color: rule.color,
+                    sound: 'smooth_notification',
+                    type: 'STAGE_UPDATE'
+                };
+            } else {
+                console.warn(`⚠️ No matching rule found in stages.json for ${category} / ${currentStage}`);
             }
 
             // Fetch Assigned Users
