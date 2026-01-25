@@ -37,8 +37,6 @@ export const handleWebhook = async (req, res) => {
             }
 
             const caseId = log.case_id;
-            let payload = log.payload || {};
-
             // ✅ Fetch case details
             const { data: caseData, error: caseError } = await supabase
                 .from("cases")
@@ -74,6 +72,7 @@ export const handleWebhook = async (req, res) => {
                 }
             }
 
+            let payload = {};
             if (rule) {
                 payload = {
                     title: `Stage ${stageNum}: ${rule.name}`,
@@ -85,6 +84,13 @@ export const handleWebhook = async (req, res) => {
                 };
             } else {
                 console.warn(`⚠️ No rule found for ${category} / ${inputVal}`);
+                // Fallback
+                payload = {
+                    title: "Case Update",
+                    body: `Case ${caseData.case_number} has been updated.`,
+                    color: "#2196F3",
+                    sound: "default"
+                };
             }
 
             // ✅ Fetch Assigned Users
@@ -111,10 +117,10 @@ export const handleWebhook = async (req, res) => {
                 return res.json({ success: true, message: "No fcm tokens" });
             }
 
-            const title = payload.title || "Case Update";
-            const body = payload.body || "You have a new update.";
-            const color = payload.color || "#2196F3";
-            const sound = payload.sound || "default";
+            const title = payload.title;
+            const body = payload.body;
+            const color = payload.color;
+            const sound = payload.sound;
             const notifType = payload.type || "GENERIC";
 
             // ✅ SEND FCM (DATA ONLY)
@@ -125,36 +131,21 @@ export const handleWebhook = async (req, res) => {
                     await firebase.messaging().send({
                         token: user.fcm_token,
 
-                        // ✅ STANDARD NOTIFICATION (Guarantees Delivery)
-                        notification: {
-                            title: safeString(title),
-                            body: safeString(body)
-                        },
-
+                        // ✅ DATA ONLY (Awesome Notifications handles display)
                         data: {
+                            title: safeString(title),
+                            body: safeString(body),
                             case_id: safeString(caseId),
                             stage_color: safeString(color),
                             sound: safeString(sound),
                             type: safeString(notifType),
-                            click_action: "FLUTTER_NOTIFICATION_CLICK",
+                            click_action: "FLUTTER_NOTIFICATION_CLICK"
                         },
 
                         android: {
                             priority: "high",
                             ttl: 60 * 60 * 1000,
-
-                            // ✅ SYSTEM STYLING (Color + Sound work here)
-                            notification: {
-                                channelId: sound === "smooth_notification"
-                                    ? "stage_updates_channel_v2"
-                                    : "high_importance_channel",
-                                color: color, // ✅ Shows Color in System Tray
-                                sound: sound,
-                                icon: 'ic_notification', // Small white icon
-                                priority: 'high',
-                                defaultSound: false,
-                                defaultVibrateTimings: false
-                            },
+                            // No 'notification' block - Silent delivery to app
                         },
                     });
 
