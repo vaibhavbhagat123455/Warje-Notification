@@ -47,18 +47,32 @@ export const handleWebhook = async (req, res) => {
             }
 
             // --- SINGLE SOURCE OF TRUTH LOGIC ---
-            // ALWAYS try to enrich based on the current stage in the DB.
+            // SMART LOOKUP: Handle both "Stage Number" (1,2..) AND "Day Number" (13, 20..)
             const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
-            const currentStage = String(caseData.stage); // Ensure string for JSON lookup
+            const inputVal = parseInt(caseData.stage);
 
-            console.log(`🔎 Lookup: Category='${category}', Stage='${currentStage}'`);
+            console.log(`🔎 Smart Lookup: Category='${category}', Input='${inputVal}'`);
 
-            const rule = stagesConfig[category] ? stagesConfig[category][currentStage] : null;
+            let rule = stagesConfig[category][inputVal]; // Try direct match (Stage ID)
+            let stageNum = inputVal;
+
+            // If no direct match, assuming Input is a DAY number, search for it
+            if (!rule) {
+                console.log("...No direct stage match, searching by Day...");
+                for (const [key, config] of Object.entries(stagesConfig[category])) {
+                    if (config.days.includes(inputVal)) {
+                        rule = config;
+                        stageNum = key;
+                        console.log(`bp Found match via Day Lookop: Day ${inputVal} -> Stage ${stageNum}`);
+                        break;
+                    }
+                }
+            }
 
             if (rule) {
-                console.log(`✨ Matched Rule: ${rule.name}`);
+                console.log(`✨ Matched Rule: Stage ${stageNum} - ${rule.name}`);
                 payload = {
-                    title: `Stage ${currentStage}: ${rule.name}`,
+                    title: `Stage ${stageNum}: ${rule.name}`,
                     body: `Case ${caseData.case_number}: ${rule.message}`,
                     color: rule.color,
                     sound: 'smooth_notification',
@@ -227,14 +241,31 @@ export const debugStage = async (req, res) => {
         if (error || !caseData) return res.status(404).json({ error: 'Case not found', details: error });
 
         const category = caseData.under_7_years ? 'under_7_years' : 'over_7_years';
-        const currentStage = String(caseData.stage);
-        const rule = stagesConfig[category][currentStage];
+        const inputVal = parseInt(caseData.stage);
+
+        // Smart Lookup Logic
+        let rule = stagesConfig[category][inputVal];
+        let matchType = "Direct Stage ID Match";
+        let stageNum = inputVal;
+
+        if (!rule) {
+            for (const [key, config] of Object.entries(stagesConfig[category])) {
+                if (config.days.includes(inputVal)) {
+                    rule = config;
+                    matchType = `Mapped from Day ${inputVal}`;
+                    stageNum = key;
+                    break;
+                }
+            }
+        }
 
         return res.json({
             success: true,
             case_number: caseData.case_number,
             category,
-            stage: currentStage,
+            db_stage_value: inputVal,
+            resolved_stage: stageNum,
+            match_type: matchType,
             matched_rule: rule || "NO MATCH FOUND - CHECK STAGES.JSON"
         });
     } catch (e) {
