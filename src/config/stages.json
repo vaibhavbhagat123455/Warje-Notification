@@ -8,7 +8,7 @@
                 10
             ],
             "color": "#4CAF50",
-            "message": "Preliminary inquiry should be in progress."
+            "message": "First 10 Days: Upon receiving information about a cognizable offense, the police initiate an investigation. A preliminary inquiry may be conducted within 14 days to ascertain whether a prima facie case exists."
         },
         "2": {
             "name": "Arrest and Bail (Jamin) Proceedings",
@@ -18,7 +18,7 @@
                 14
             ],
             "color": "#FF9800",
-            "message": "Check arrest / bail proceedings. Charge sheet filing limit approach."
+            "message": "11th–14th Day: If investigation reveals sufficient grounds, accused may be arrested and produced before Magistrate within 24 hours. Max police custody is 15 days. 60 days is charge sheet filing limit."
         },
         "3": {
             "name": "Crime Investigation with Senior PI",
@@ -28,7 +28,7 @@
                 19
             ],
             "color": "#2196F3",
-            "message": "Investigation continues under Senior PI supervision."
+            "message": "15th–19th Day: Investigation continues under supervision of Senior PI. IO collects evidence, records statements, and prepares case diary."
         },
         "4": {
             "name": "Report Submission to ACP",
@@ -38,7 +38,7 @@
                 24
             ],
             "color": "#9C27B0",
-            "message": "Submit progress report to ACP for review."
+            "message": "20th–24th Day: IO submits progress report to ACP. ACP reviews investigation and may provide further directions."
         },
         "5": {
             "name": "Finalization of Investigation",
@@ -47,7 +47,7 @@
                 27
             ],
             "color": "#F44336",
-            "message": "Finalize investigation and prepare charge sheet."
+            "message": "25th–27th Day: IO finalizes investigation, prepares charge sheet, and submits to Magistrate. If not completed within 60 days, accused may be released on bail."
         },
         "6": {
             "name": "Court Verification",
@@ -56,7 +56,7 @@
                 29
             ],
             "color": "#009688",
-            "message": "Present charge sheet for court verification."
+            "message": "28th–29th Day: Charge sheet presented in appropriate court (Taluka/District). Court verifies charge sheet and may issue summons/warrants."
         },
         "7": {
             "name": "Submission of Crime to Court",
@@ -65,7 +65,7 @@
                 30
             ],
             "color": "#795548",
-            "message": "Formal submission to court for trial scheduling."
+            "message": "30th Day: Case formally submitted to court for trial. Court schedules hearings and trial proceeds."
         }
     },
     "over_7_years": {
@@ -77,7 +77,7 @@
                 20
             ],
             "color": "#4CAF50",
-            "message": "Preliminary inquiry check for major case."
+            "message": "First 20 Days: Police initiate investigation. Preliminary inquiry matching major offense protocols."
         },
         "2": {
             "name": "Arrest and Bail (Jamin) Proceedings",
@@ -87,7 +87,7 @@
                 30
             ],
             "color": "#FF9800",
-            "message": "Arrest / Bail limit check for major case."
+            "message": "21st–30th Day: Arrest proceedings. Accused produced before Magistrate within 24 hours. Max police custody 15 days."
         },
         "3": {
             "name": "Crime Investigation with Senior PI",
@@ -97,7 +97,7 @@
                 35
             ],
             "color": "#2196F3",
-            "message": "Senior PI review due for major investigation."
+            "message": "31st–35th Day: Investigation continues under Senior PI supervision. Evidence collection and case diary preparation."
         },
         "4": {
             "name": "Report Submission to ACP",
@@ -107,7 +107,7 @@
                 40
             ],
             "color": "#9C27B0",
-            "message": "Progress report due to ACP."
+            "message": "35th–40th Day: IO submits progress report to ACP for review and directions."
         },
         "5": {
             "name": "Finalization of Investigation",
@@ -117,7 +117,7 @@
                 50
             ],
             "color": "#F44336",
-            "message": "Finalize investigation for major case."
+            "message": "41st–50th Day: Finalize investigation, prepare charge sheet. 60/90 day filing limit check."
         },
         "6": {
             "name": "Court Verification",
@@ -127,7 +127,7 @@
                 55
             ],
             "color": "#009688",
-            "message": "Major case court verification of charge sheet."
+            "message": "51st–55th Day: Charge sheet presented in Taluka/District Court for verification and issuance of summons."
         },
         "7": {
             "name": "Submission of Crime to Court",
@@ -137,7 +137,7 @@
                 60
             ],
             "color": "#795548",
-            "message": "Submit to court (60 day limit) for major case."
+            "message": "56th–60th Day: Formal submission to court for trial scheduling."
         }
     }
 }
